@@ -71,6 +71,10 @@ jobs:
             git -C "$flutter_root" checkout --detach FETCH_HEAD
           fi
           test "$(git -C "$flutter_root" rev-parse HEAD)" = "$FLUTTER_OHOS_REVISION"
+          # Flutter derives its SDK version from Git tags, including in shallow clones.
+          git -C "$flutter_root" fetch --depth=1 origin tag '3.41.9+ohos-1.0.2'
+          test "$(git -C "$flutter_root" rev-parse '3.41.9+ohos-1.0.2^{commit}')" = "$FLUTTER_OHOS_REVISION"
+          rm -f "$flutter_root/bin/cache/flutter.version.json"
           echo "$flutter_root/bin" >> "$GITHUB_PATH"
           echo "DEVECO_NODE_HOME=$HOME/ohos-sdk/command-line-tools/tool/node" >> "$GITHUB_ENV"
       - name: Resolve dependencies
