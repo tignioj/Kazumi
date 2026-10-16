@@ -25,6 +25,8 @@ concurrency:
 env:
   FLUTTER_OHOS_REVISION: 62357a93d653bf844f730bb1f4b7cc9e2139d14e
   CI: true
+  # Plugin example projects reference unavailable LFS objects; none are build inputs.
+  GIT_LFS_SKIP_SMUDGE: '1'
 
 jobs:
   build:
@@ -56,11 +58,14 @@ jobs:
         with:
           version: 26.0.0.821
           cache: true
-      - name: Cache Flutter-OH
-        uses: actions/cache@v4
+      - name: Restore Flutter-OH and Pub cache
+        id: build-cache
+        uses: actions/cache/restore@v4
         with:
-          path: ${{ runner.temp }}/flutter-ohos
-          key: flutter-ohos-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_OHOS_REVISION }}
+          path: |
+            ${{ runner.temp }}/flutter-ohos
+            ~/.pub-cache
+          key: ohos-build-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_OHOS_REVISION }}-${{ hashFiles('pubspec*.yaml', 'pubspec.lock') }}
       - name: Set up pinned Flutter-OH
         run: |
           flutter_root="$RUNNER_TEMP/flutter-ohos"
@@ -109,6 +114,14 @@ jobs:
           name: ohos-release
           path: build/ohos-release/
           if-no-files-found: error
+      - name: Save toolchain and dependency cache
+        if: always() && steps.build-cache.outputs.cache-primary-key != '' && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ runner.temp }}/flutter-ohos
+            ~/.pub-cache
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
   publish:
     name: Publish GitHub prerelease
