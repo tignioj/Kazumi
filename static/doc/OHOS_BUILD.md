@@ -11,9 +11,16 @@
   固定提交为 `c7c9132dfae816680df955a86f95f7b5e36704ad`，克隆本仓库后无需相邻的本地目录。
   若需联调本地修改，可临时将该 override 改为 `path: ../ech_http`。
 - 鸿蒙插件及其 federated 实现均固定 Git 提交，解析结果记录在 `pubspec.lock`。
-- OHOS 使用 media-kit 提交 `994465d9bfca3f39d0b41199d16e7fd93fe97881` 的
-  插件式 mpv 打包。2.3.9 原本使用的新 mpv Native Assets hook 没有 OHOS 目标，
-  不能直接替代这个鸿蒙插件。`ech_http` 独立使用其已适配的 Native Assets hook。
+- `pubspec.yaml` 的 `media_kit` 与 `media_kit_video` 均引用
+  `https://github.com/tignioj/media-kit.git`，固定提交为
+  `049278dee62e18bb008fabc293fbcbbaa2739d7c`。适配基于上游
+  `6b188ae978808a63e5b58b7ce61f7725238c04c5`，克隆后无需本地 media-kit 目录。
+  构建钩子识别 Flutter-OH 以 Linux 上报的 OHOS 编译器，选取鸿蒙版 `libmpv.so`，
+  用 OHOS triple/sysroot 编译 `libmedia_kit_event_loop.so`，并打包 SDK 的 C++ 运行库。
+  不再固定旧版 `994465d9`，也不再依赖任何 `media_kit_libs_*` 插件。
+- hooks/code_assets/native_toolchain_c 版本范围兼容 Flutter-OH 的 `meta 1.17`，
+  同时保留新版协议的支持。播放器继续使用新版 C 事件循环和确定性销毁流程。
+  当前鸿蒙预编译包支持 arm64；其他鸿蒙架构和模拟器不在支持范围。
 
 Flutter-OH 3.41 没有较新 Flutter 的 `appBuildName`、`MenuAnchor.animated`、
 `ReorderableListView.onReorderItem`。本分支使用编译参数提供版本号，移除菜单动画参数，
@@ -25,23 +32,44 @@ Flutter-OH 3.41 没有较新 Flutter 的 `appBuildName`、`MenuAnchor.animated`�
 
 ```sh
 flutter pub get
+dart analyze lib tool test
 flutter test --no-pub
 flutter build hap --debug --no-codesign --dart-define=KAZUMI_VERSION=2.3.9
 ```
 
 HAP 位于 `ohos/entry/build/default/outputs/default/entry-default-unsigned.hap`。
-安装前需正常的华为调试签名。当前构建是 Debug；本机的 Flutter-OH Release AOT
-编译器为 Intel 架构，Apple Silicon 上的 Release 构建还需要 Rosetta。
+安装前需正常的华为调试签名。默认示例为 Debug，Release 使用 `--release`。
+本机 Flutter-OH 的 Release AOT 编译器为 Intel 架构；已安装 Rosetta，
+Apple Silicon 上现在可以完成 Release AOT。
 
 为避免覆盖用户已有安装和数据，测试工程使用包名 `com.predidit.kazumi.ohostest`，
 应用名为“Kazumi 2.3.9 测试”。
+
+## CLI 签名与安装
+
+本机小白调试助手包含可独立调用的 `assets/macos/signer`。首次使用助手为
+对应包名和设备生成证书/Profile 后，可以直接复用本地材料，无需 GUI 选择文件。
+`tool/sign_ohos.py` 从助手的 `signConfig.json` 读取现有配置，按包名选择 Profile，
+完成 HAP 和原生代码签名后执行 `verify-app`；不在源码或日志中记录密钥密码。
+可用 `--config`、`--profile`、`--signer` 指定其他路径。
+
+```sh
+mkdir -p /tmp/kz
+cp build/ohos/hap/entry-default-unsigned.hap /tmp/kz/kazumi.hap
+python3 tool/sign_ohos.py /tmp/kz/kazumi.hap /tmp/kz/kazumi-signed.hap
+hdc install -r /tmp/kz/kazumi-signed.hap
+hdc shell aa start -a EntryAbility -b com.predidit.kazumi.ohostest
+```
+
+安装包使用短路径；正常入口包是 `/tmp/kz/kazumi-signed.hap`。
+启动前需要解锁真机屏幕。签名仅复用已有本地证书和设备 Profile，不申请新凭据。
 
 ## 真机集成检查
 
 `tool/ohos_smoke.dart` 先启动完整 Kazumi，再将独立测试应用的 Bangumi 网络模式设为 ECH，
 验证真实 `BangumiEchResolver`、Dio adapter、ECH 图片服务。正常入口仍为 `lib/main.dart`。
 
-可生成一段本地测试视频，经 USB 反向端口转发验证 mpv 解码、纹理首帧和播放进度：
+可生成一段本地测试视频，经 USB 反向端口转发验证 mpv 解码、视频纹理、播放进度及生命周期：
 
 ```sh
 mkdir -p build/smoke
@@ -57,23 +85,88 @@ flutter build hap --debug --no-codesign --no-pub \
 ```
 
 签名安装并启动后，使用 `hdc shell hilog -x -e KAZUMI_OHOS_SMOKE` 读取检查结果。
-播放检查会短暂显示静音测试画面，结束后移除画面并销毁测试播放器。
+播放检查在软解/自动硬解与同步/异步模式的四种组合下各运行 3 次，
+总计 12 次。每次确认纹理 ID、视频尺寸和播放进度，检查并发销毁复用同一个
+Future、重复销毁正常完成、销毁后 mpv 句柄归零；另做 3 次初始化期间直接销毁。
+测试画面静音显示，结束后移除并销毁播放器。
 结束后用 `hdc fport ls` 查看并删除本次 USB 转发。
 
-## 验证记录（2026-10-17）
+## 新版 Native Assets Debug 验证记录（2026-10-17）
 
-- macOS 上 213 项 Flutter 测试通过。
-- 将 `ech_http` 切换为 fork 中的固定 Git 提交后，213 项测试及 Debug HAP 构建复验通过。
-- Dart 静态分析无 error/warning；仍有上游原有的 info 级 lint 提示。
-- 鸿蒙 Debug HAP 构建通过，包含 arm64 `libmpv.so`、`libech_http.so` 和
-  `package:ech_http/ech_http_bindings` 的 Native Assets 映射。
-- MatePad mini（HarmonyOS API 26）签名安装、启动成功，首页番组与封面显示正常。
-- 真实 Bangumi HTTPS 请求返回 HTTP 200、`ECH accepted: true`。
-- 应用的 Bangumi Dio adapter 返回 HTTP 200，JSON 条目 ID 为 2。
-- 应用的 ECH 图片服务返回 HTTP 200，成功接收 6643 字节封面数据。
-- mpv 渲染测试视频首帧，播放进度超过 1 秒，总时长为 8 秒；network/playback 检查均 PASS。
-- 自检后改用 `lib/main.dart` 重新构建、签名并更新同一独立测试应用，正常进入首页。
-  最终安装版本不自动运行自检，不依赖本地视频服务；临时 HTTP 服务和 USB 转发已清理。
-- 本地检查记录在 `build/ohos-runtime-smoke.log`，最终签名包为
-  `build/Kazumi_2.3.9_OHOS_Debug_signed.hap`。
-- 未运行远程 CI、Release AOT、第三方规则源逐个播放、后台续播和账号同步验证。
+- media-kit 的 19 项 hook/核心生命周期测试通过；补充 C++ 运行库打包后，
+  12 项 hook 测试再次通过，hook 静态分析无问题。
+- Kazumi 的 213 项 Flutter 测试通过；`dart analyze lib tool test` 无 error/warning，
+  有 27 条现有 info 级 lint。精简 Flutter-OH SDK 的 `flutter analyze` 会因缺少
+  `dev/` 目录退出，使用内置 Dart analyzer 验证。
+- 鸿蒙 Debug 自检包和正常入口 HAP 均构建、签名、验签通过，包含 arm64
+  `libmpv.so`、`libmedia_kit_event_loop.so`、`libc++_shared.so`、`libech_http.so`。
+  `NativeAssetsManifest.json` 的 `ohos_arm64` 包含 media-kit 的 libmpv、
+  C 事件循环及 C++ 运行库映射。
+- MatePad mini（HarmonyOS API 26）通过 CLI 覆盖安装独立测试应用成功。
+  真机日志显示 ECH 请求、Bangumi Dio adapter、封面请求均返回 HTTP 200，
+  `ECH accepted: true`，接收 6643 字节封面数据。
+- 12 轮视频播放/销毁全部通过：软解为 `hwdec=no`，硬解为 `hwdec=ohcodec`；
+  播放进度超过 1 秒，测试视频时长 8 秒；每轮并发及重复销毁均完成，
+  mpv 句柄归零，首轮销毁耗时 78–126 ms。另 3 次初始化期间直接销毁通过。
+  为确认实际纹理画面重复运行一轮，累计 24 次播放/销毁和 6 次提前销毁均通过，
+  两轮销毁耗时范围为 69–136 ms。
+- 真机截图确认彩色动态测试画面经 Flutter 纹理实际显示。
+  `build/ohos-native-assets-screen.jpeg` 保存播放截图。
+- 日志记录在 `build/ohos-native-assets-smoke.log`；包含
+  `lifecycle 12 render/dispose cycles, 3 early disposals PASS` 和 `playback PASS`。
+  第二轮记录为 `build/ohos-native-assets-visual-smoke.log`。
+  原始 E/F 日志中仍有 Flutter-OH 图片方向和纹理初始空 buffer 等平台日志，
+  本次未出现 Dart 未处理异常、进程崩溃或销毁超时。
+- 自检后重新安装正常 `lib/main.dart` 入口包，保留相同的新版 media-kit 依赖。
+  最终包已正常进入首页，封面显示正常；未产生自检日志，也不依赖本地视频服务。
+  临时 HTTP 服务和 USB 反向转发已清理。
+- 最终签名包为 `/tmp/kz/kazumi-signed.hap`，工作区副本为
+  `build/Kazumi_2.3.9_OHOS_NativeAssets_Debug_signed.hap`。
+- 本节为 Debug 验证；Release AOT 结果见下节。未运行远程 CI、第三方规则源逐个播放、
+  后台续播和账号同步验证。
+
+
+## Release AOT 构建与验证（2026-10-17）
+
+Flutter-OH 当前的 macOS AOT 工具是 x86_64；本机安装 Rosetta 后编译成功。
+以下命令生成正常入口包，仍使用独立测试包名与现有设备 Profile：
+
+```sh
+flutter build hap --release --no-codesign --no-pub \
+  --dart-define=KAZUMI_VERSION=2.3.9
+cp build/ohos/hap/entry-default-unsigned.hap /tmp/kz/release.hap
+python3 tool/sign_ohos.py /tmp/kz/release.hap /tmp/kz/release-signed.hap
+hdc install -r /tmp/kz/release-signed.hap
+hdc shell aa start -a EntryAbility -b com.predidit.kazumi.ohostest
+```
+
+Release 自检使用相同命令加上 `--target tool/ohos_smoke.dart` 和
+`--dart-define=OHOS_SMOKE_VIDEO=http://127.0.0.1:18765/player.mp4`，
+按前述方法启用临时 HTTP 服务与 USB 反向转发。自检入口记录
+`KAZUMI_OHOS_SMOKE mode=release`，可区分 AOT 与 Debug。
+
+
+- 自检与正常入口 Release HAP 均构建、CLI 签名及验签成功。
+  正常签名包为 83,375,167 字节（约 79.5 MiB）。
+- 两个 HAP 均为 `debug=false`，包含 arm64 AOT `libapp.so`，不包含
+  `kernel_blob.bin`。Native Assets 映射保留 libmpv、C 事件循环和 C++ 运行库。
+- MatePad mini 上两轮自检均记录 `mode=release`、`network PASS`、
+  `playback PASS`。每轮完成 12 次渲染/销毁和 3 次初始化期间销毁，
+  累计 24 次播放/销毁、6 次提前销毁全部通过。
+- 软解 `hwdec=no`、硬解 `hwdec=ohcodec`；同步/异步模式均通过。
+  每轮并发销毁共用 Future、重复销毁正常返回、mpv 句柄归零，
+  两轮销毁耗时 76–160 ms。未观察到进程崩溃、未处理 Dart 异常或销毁超时。
+- `build/ohos-release-playback.jpeg` 记录 Release 硬解的实际测试画面。
+- `build/ohos-release-smoke-first.log`、`build/ohos-release-smoke.log`
+  保存两轮检查结果；对应完整日志为 `build/ohos-release-runtime-first.log`、
+  `build/ohos-release-runtime.log`。
+- 检查完成后已换回正常 `lib/main.dart` 入口的 Release 包。
+  正常包为 `/tmp/kz/release-signed.hap`，工作区副本为
+  `build/Kazumi_2.3.9_OHOS_NativeAssets_Release_signed.hap`。
+  正常包启动后首页与封面显示正常，没有自检日志；临时 HTTP 服务和 USB 转发已清理。
+
+
+固定 Git 依赖后的验证：`flutter pub get` 成功，两个 media-kit 包均来自
+Pub 的 Git 缓存，并解析为提交 `049278dee62e18bb008fabc293fbcbbaa2739d7c`。
+没有本地路径依赖；213 项 Flutter 测试通过，静态分析无 error/warning，
+正常入口 Release HAP 再次构建成功。

@@ -95,16 +95,14 @@ dependencies:
       ref: b429f8ba6b8a99cd0f7eb5fe8d1621f325635c3d
   media_kit:
     git:
-      url: https://github.com/Predidit/media-kit.git
-      ref: 6b188ae978808a63e5b58b7ce61f7725238c04c5
+      url: https://github.com/tignioj/media-kit.git
+      ref: 049278dee62e18bb008fabc293fbcbbaa2739d7c
       path: ./media_kit
   media_kit_video:
     git:
-      url: https://github.com/Predidit/media-kit.git
-      ref: 6b188ae978808a63e5b58b7ce61f7725238c04c5
+      url: https://github.com/tignioj/media-kit.git
+      ref: 049278dee62e18bb008fabc293fbcbbaa2739d7c
       path: ./media_kit_video
-  # OHOS still needs the plugin that bundles libmpv and the video texture bridge.
-  media_kit_libs_video: any
   macos_secure_bookmarks: ^0.2.1
 
 dev_dependencies:
