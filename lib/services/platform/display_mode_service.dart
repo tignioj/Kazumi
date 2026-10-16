@@ -20,16 +20,27 @@ class DisplayModeService {
         await _attempt(() => windowManager.setFullScreen(fullscreen));
         return;
       }
+      if (defaultTargetPlatform == TargetPlatform.ohos) {
+        await _attempt(
+          () => _intentChannel.invokeMethod(
+            fullscreen ? 'enterFullscreen' : 'exitFullscreen',
+            fullscreen ? <String, bool>{'needSet': true} : null,
+          ),
+        );
+        return;
+      }
 
       // Restore system orientation on exit, including an existing landscape.
-      await _attempt(() => SystemChrome.setPreferredOrientations(
-            fullscreen
-                ? [
-                    DeviceOrientation.landscapeLeft,
-                    DeviceOrientation.landscapeRight
-                  ]
-                : [],
-          ));
+      await _attempt(
+        () => SystemChrome.setPreferredOrientations(
+          fullscreen
+              ? [
+                  DeviceOrientation.landscapeLeft,
+                  DeviceOrientation.landscapeRight,
+                ]
+              : [],
+        ),
+      );
     });
   }
 
@@ -58,21 +69,22 @@ class DisplayModeService {
     // Rotation acknowledgements must not delay immersion or route cleanup.
     late final Future<void> request;
     request = (_pendingSystemBars ?? Future<void>.value())
-        .then((_) => _attempt(() async {
-              if (defaultTargetPlatform == TargetPlatform.android) {
-                await _intentChannel.invokeMethod(
-                    'setSystemBarsHidden', hidden);
-              } else if (defaultTargetPlatform == TargetPlatform.iOS) {
-                await SystemChrome.setEnabledSystemUIMode(
-                  hidden
-                      ? SystemUiMode.immersiveSticky
-                      : SystemUiMode.edgeToEdge,
-                );
-              }
-            }))
+        .then(
+          (_) => _attempt(() async {
+            if (defaultTargetPlatform == TargetPlatform.android) {
+              await _intentChannel.invokeMethod('setSystemBarsHidden', hidden);
+            } else if (defaultTargetPlatform == TargetPlatform.ohos) {
+              await _intentChannel.invokeMethod('setSystemBarsHidden', hidden);
+            } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+              await SystemChrome.setEnabledSystemUIMode(
+                hidden ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+              );
+            }
+          }),
+        )
         .whenComplete(() {
-      if (identical(_pendingSystemBars, request)) _pendingSystemBars = null;
-    });
+          if (identical(_pendingSystemBars, request)) _pendingSystemBars = null;
+        });
     return _pendingSystemBars = request;
   }
 
@@ -80,8 +92,11 @@ class DisplayModeService {
     try {
       await operation();
     } catch (error, stackTrace) {
-      KazumiLogger().e('Display: failed to apply video display mode',
-          error: error, stackTrace: stackTrace);
+      KazumiLogger().e(
+        'Display: failed to apply video display mode',
+        error: error,
+        stackTrace: stackTrace,
+      );
     }
   }
 }

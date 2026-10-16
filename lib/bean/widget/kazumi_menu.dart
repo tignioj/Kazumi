@@ -47,7 +47,7 @@ class KazumiMenuButton extends StatelessWidget {
         controller: controller,
         consumeOutsideTap: true,
         crossAxisUnconstrained: crossAxisUnconstrained,
-        animated: animated && !MediaQuery.disableAnimationsOf(context),
+        // Flutter-OH 3.41 has no MenuAnchor.animated parameter.
         onOpen: onOpen,
         onClose: onClose,
         style: style,

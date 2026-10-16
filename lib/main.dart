@@ -23,7 +23,7 @@ import 'package:kazumi/services/platform/webview_feature_service.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
 import 'package:kazumi/navigation.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   registerEchHttpLicenses();
   MediaKit.ensureInitialized();

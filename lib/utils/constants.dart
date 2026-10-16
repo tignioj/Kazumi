@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:kazumi/request/config/api_endpoints.dart';
 
 class StyleString {
@@ -20,6 +19,7 @@ const ProgressIndicatorThemeData progressIndicatorTheme2024 =
 
 /// Opts into the newer Material slider appearance while Flutter still exposes
 /// the compatibility flag.
+/// ignore: deprecated_member_use
 const SliderThemeData sliderTheme2024 = SliderThemeData(
   // ignore: deprecated_member_use
   year2023: false,
@@ -32,10 +32,12 @@ const _pageTransitionBuilders = <TargetPlatform, PageTransitionsBuilder>{
   TargetPlatform.linux: FadeUpwardsPageTransitionsBuilder(),
   TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
   TargetPlatform.windows: FadeUpwardsPageTransitionsBuilder(),
+  TargetPlatform.ohos: CupertinoPageTransitionsBuilder(),
 };
 
-const PageTransitionsTheme pageTransitionsTheme2024 =
-    PageTransitionsTheme(builders: _pageTransitionBuilders);
+const PageTransitionsTheme pageTransitionsTheme2024 = PageTransitionsTheme(
+  builders: _pageTransitionBuilders,
+);
 
 // Applied only to the settings navigator; fullscreen routes use the app theme.
 final PageTransitionsTheme settingsPageTransitionsTheme = PageTransitionsTheme(
@@ -89,7 +91,7 @@ Map<String, String> bangumiHTTPHeader = {
   'user-agent':
       'Predidit/Kazumi/${ApiEndpoints.version} (Android) (https://github.com/Predidit/Kazumi)',
   'referer': '',
-  'content-type': 'application/json'
+  'content-type': 'application/json',
 };
 
 /// 可选硬件解码器
@@ -136,7 +138,7 @@ const List<String> mpvAnime4KShaders = [
   'Anime4K_Upscale_CNN_x2_VL.glsl',
   'Anime4K_AutoDownscalePre_x2.glsl',
   'Anime4K_AutoDownscalePre_x4.glsl',
-  'Anime4K_Upscale_CNN_x2_M.glsl'
+  'Anime4K_Upscale_CNN_x2_M.glsl',
 ];
 
 /// 超分辨率滤镜 (轻量)
@@ -147,7 +149,7 @@ const List<String> mpvAnime4KShadersLite = [
   'Anime4K_Upscale_CNN_x2_M.glsl',
   'Anime4K_AutoDownscalePre_x2.glsl',
   'Anime4K_AutoDownscalePre_x4.glsl',
-  'Anime4K_Upscale_CNN_x2_S.glsl'
+  'Anime4K_Upscale_CNN_x2_S.glsl',
 ];
 
 /// 可选播放倍速

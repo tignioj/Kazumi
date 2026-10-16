@@ -4,17 +4,14 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:kazumi/webview/video/impl/video_webview_android_impl.dart';
 import 'package:kazumi/webview/video/impl/video_webview_impl.dart';
+import 'package:kazumi/webview/video/impl/video_webview_ohos_impl.dart';
 import 'package:kazumi/webview/video/impl/video_webview_windows_impl.dart';
 import 'package:kazumi/webview/video/impl/video_webview_linux_impl.dart';
 import 'package:kazumi/webview/video/impl/video_webview_apple_impl.dart';
 import 'package:kazumi/services/platform/webview_feature_service.dart';
 import 'package:kazumi/services/video_source/video_source_format.dart';
 
-typedef VideoParserEvent = ({
-  String url,
-  int offset,
-  VideoSourceFormat format,
-});
+typedef VideoParserEvent = ({String url, int offset, VideoSourceFormat format});
 
 abstract class VideoWebviewController<T> {
   // WebView controller.
@@ -61,11 +58,7 @@ abstract class VideoWebviewController<T> {
     String url, {
     VideoSourceFormat format = VideoSourceFormat.auto,
   }) {
-    _videoParserEventController.add((
-      url: url,
-      offset: offset,
-      format: format,
-    ));
+    _videoParserEventController.add((url: url, offset: offset, format: format));
   }
 
   void disposeEventControllers() {
@@ -107,6 +100,9 @@ class VideoWebviewControllerFactory {
     if (Platform.isAndroid &&
         WebViewFeatureService.isDocumentStartScriptSupported) {
       return VideoWebviewAndroidImpl();
+    }
+    if (Platform.isOhos) {
+      return VideoWebviewOhosImpl();
     }
     return VideoWebviewImpl();
   }

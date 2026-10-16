@@ -411,7 +411,6 @@ class _RoadSelectorState extends State<_RoadSelector> {
         childFocusNode: _focusNode,
         crossAxisUnconstrained: false,
         consumeOutsideTap: true,
-        animated: !reduceMotion,
         onClose: _handleClose,
         alignmentOffset: const Offset(0, 8),
         style: MenuStyle(

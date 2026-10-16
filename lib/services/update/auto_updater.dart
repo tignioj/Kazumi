@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:kazumi/bean/dialog/dialog_helper.dart';
 import 'package:kazumi/bean/dialog/update_available_dialog.dart';
 import 'package:kazumi/request/clients/download_http_client.dart';
@@ -24,6 +25,7 @@ enum InstallationType {
   macosDmg('DMG'),
   androidApk('APK'),
   ios('IPA'),
+  ohos('HAP'),
   unknown('未知类型');
 
   const InstallationType(this.label);
@@ -95,6 +97,8 @@ List<String> getUpdateFilePatterns(InstallationType installationType) {
       return ['macos', '.dmg'];
     case InstallationType.androidApk:
       return ['android', '.apk'];
+    case InstallationType.ohos:
+      return ['ohos', '.hap'];
     case InstallationType.linuxDeb:
     case InstallationType.linuxTar:
     case InstallationType.ios:
@@ -122,6 +126,7 @@ class AutoUpdater {
     if (Platform.isMacOS) return [InstallationType.macosDmg];
     if (Platform.isIOS) return [InstallationType.ios];
     if (Platform.isAndroid) return [InstallationType.androidApk];
+    if (Platform.isOhos) return [InstallationType.ohos];
     return [InstallationType.unknown];
   }
 
@@ -452,6 +457,9 @@ class AutoUpdater {
           KazumiDialog.showToast(message: '无法打开安装文件: ${result.message}');
           return;
         }
+      } else if (Platform.isOhos) {
+        const platform = MethodChannel('com.predidit.kazumi/intent');
+        await platform.invokeMethod('openWithInstaller', <String, String>{'path': filePath});
       }
     } catch (e) {
       KazumiDialog.showToast(message: '启动安装程序失败: ${e.toString()}');
@@ -514,6 +522,8 @@ class AutoUpdater {
       extension = '.deb';
     } else if (Platform.isAndroid) {
       extension = '.apk';
+    } else if (Platform.isOhos) {
+      extension = '.hap';
     }
     return 'Kazumi-$version$extension';
   }

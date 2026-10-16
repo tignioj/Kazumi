@@ -10,6 +10,7 @@ analyzer:
     - "**/*.g.dart"
     - "**/*.freezed.dart"
     - android/**
+    - ohos/**
     - ios/**
     - web/**
     - windows/**

@@ -195,7 +195,7 @@ class _ThemeSettingsPageState extends State<ThemeSettingsPage> {
               ),
               SettingsTile.switchTile(
                 leading: Icons.colorize_rounded,
-                enabled: !Platform.isIOS,
+                enabled: !Platform.isIOS && !Platform.isOhos,
                 onToggle: (value) async {
                   useDynamicColor = value ?? !useDynamicColor;
                   await GStorage.putSetting(

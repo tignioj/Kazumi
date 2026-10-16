@@ -41,6 +41,7 @@ class _AppWidgetState extends State<AppWidget>
   }
 
   Future<void> _initializePlatformIntegrations() async {
+    await checkOhosDesktop();
     if (isDesktop()) {
       await windowManager.setPreventClose(true);
       await _handleTray();
