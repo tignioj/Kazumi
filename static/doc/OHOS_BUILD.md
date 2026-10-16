@@ -45,6 +45,38 @@ Apple Silicon 上现在可以完成 Release AOT。
 为避免覆盖用户已有安装和数据，测试工程使用包名 `com.predidit.kazumi.ohostest`，
 应用名为“Kazumi 2.3.9 测试”。
 
+## GitHub Actions 自动构建与发布
+
+`.github/workflows/ohos-release.yaml` 使用 GitHub 托管的 Ubuntu 24.04 runner，
+安装固定版本的 HarmonyOS CLI 26.0.0.821 和上述固定提交的 Flutter-OH。
+不需要自托管 runner 或本地路径依赖。首次运行会下载工具链和编译 ECH 原生依赖，
+后续运行复用 SDK 与 Flutter 缓存。
+
+从包含鸿蒙适配的分支推送 `<pubspec 版本>-ohos.<序号>` 标签即可自动发布测试版：
+
+```sh
+git tag 2.3.9-ohos.1
+git push origin 2.3.9-ohos.1
+```
+
+每次使用新序号。工作流先检查标签与 `pubspec.yaml` 的版本一致，再按 lockfile
+解析依赖、执行 Dart 静态分析与 Flutter 测试、构建正常入口的 arm64 Release HAP。
+`tool/package_ohos_release.py` 校验包名、版本、非 Debug AOT、ELF 架构及
+ECH/media-kit Native Assets 映射，最后发布 GitHub prerelease，包含：
+
+- `Kazumi_<标签>_HarmonyOS_arm64_unsigned.hap`
+- `SHA256SUMS`
+- `build-info.json`（源码提交、Flutter 提交、SDK、版本和 SHA-256）
+
+这些标签不会触发原来的 Android/Windows/iOS/macOS/Linux Release 工作流。
+工作流也声明了手动运行入口：指定 `tag`，默认只生成 Actions artifact；
+开启 `publish` 才发布。GitHub 的手动运行入口要求默认分支也包含此工作流。
+
+公开下载的 HAP **未签名**，下载者需要使用自己的华为设备证书/Profile 签名后侧载。
+CI 不上传本机私钥、证书、设备 Profile，也不使用本机绑定设备的签名包。
+需要 API 凭据的功能可按原工作流使用仓库的 `DANDANAPI_APPID`、`DANDANAPI_KEY`、
+`KAZUMI_APPID`、`KAZUMI_KEY` Secrets；未配置时以空值构建。
+
 ## CLI 签名与安装
 
 本机小白调试助手包含可独立调用的 `assets/macos/signer`。首次使用助手为

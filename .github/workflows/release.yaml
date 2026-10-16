@@ -5,6 +5,7 @@
       push:
         tags:
           - "*"
+          - "!*-ohos*"
       workflow_dispatch:
         inputs:
           logLevel:
