@@ -39,19 +39,6 @@ jobs:
     steps:
       - name: Clone repository
         uses: actions/checkout@v4
-      - name: Validate release API credentials
-        run: |
-          missing_credentials=false
-          for credential_name in DANDANAPI_APPID DANDANAPI_KEY KAZUMI_APPID KAZUMI_KEY; do
-            if [ -z "${!credential_name}" ]; then
-              echo "::error::Missing Actions Secret: $credential_name"
-              missing_credentials=true
-            fi
-          done
-          if [ "$missing_credentials" = true ]; then
-            exit 1
-          fi
-        shell: bash
       - name: Extract tag name
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
         shell: bash
