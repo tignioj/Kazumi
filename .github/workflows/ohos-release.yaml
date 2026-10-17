@@ -1,0 +1,193 @@
+name: HarmonyOS Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag, for example 2.3.9-ohos.1'
+        required: true
+        type: string
+      source_ref:
+        description: 'Integration source branch or pinned commit to build'
+        required: true
+        default: 'codex/feat-ohos-2.3.9-integration'
+        type: string
+      allow_missing_api_credentials:
+        description: 'Allow a prerelease without the optional API credentials'
+        default: false
+        type: boolean
+      publish:
+        description: 'Publish a GitHub prerelease after validation'
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ohos-release-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_OHOS_REVISION: 62357a93d653bf844f730bb1f4b7cc9e2139d14e
+  CI: true
+  # Plugin example projects reference unavailable LFS objects; none are build inputs.
+  GIT_LFS_SKIP_SMUDGE: '1'
+
+jobs:
+  build:
+    name: Build and validate arm64 Release HAP
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    outputs:
+      source_commit: ${{ steps.source.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preserve release tooling
+        run: cp tool/package_integration_release.py "$RUNNER_TEMP/package_integration_release.py"
+      - name: Check out requested application source
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_ref }}
+      - name: Record application source
+        id: source
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Validate release API credentials
+        env:
+          ALLOW_MISSING_API_CREDENTIALS: ${{ inputs.allow_missing_api_credentials }}
+          DANDANAPI_APPID: ${{ secrets.DANDANAPI_APPID }}
+          DANDANAPI_KEY: ${{ secrets.DANDANAPI_KEY }}
+          KAZUMI_APPID: ${{ secrets.KAZUMI_APPID }}
+          KAZUMI_KEY: ${{ secrets.KAZUMI_KEY }}
+        run: |
+          missing_credentials=false
+          for credential_name in DANDANAPI_APPID DANDANAPI_KEY KAZUMI_APPID KAZUMI_KEY; do
+            if [ -z "${!credential_name}" ]; then
+              echo "::warning::Missing Actions Secret: $credential_name"
+              missing_credentials=true
+            fi
+          done
+          if [ "$missing_credentials" = true ] && [ "$ALLOW_MISSING_API_CREDENTIALS" != true ]; then
+            echo "::error::API credentials are missing; explicitly allow a limited prerelease to continue."
+            exit 1
+          fi
+          if [ "$missing_credentials" = true ]; then
+            echo "API_CREDENTIALS_PRESENT=false" >> "$GITHUB_ENV"
+          else
+            echo "API_CREDENTIALS_PRESENT=true" >> "$GITHUB_ENV"
+          fi
+      - name: Validate release tag
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python3 "$RUNNER_TEMP/package_integration_release.py" --check-tag "$RELEASE_TAG"
+          echo "RELEASE_TAG=$RELEASE_TAG" >> "$GITHUB_ENV"
+      - name: Install native build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++ libgl1
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - name: Set up HarmonyOS SDK
+        uses: ErBWs/setup-ohos@3a251d7e29546c19a9f5fbd3aa4614f6df196910
+        with:
+          version: 26.0.0.821
+          cache: true
+      - name: Restore Flutter-OH and Pub cache
+        id: build-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ${{ runner.temp }}/flutter-ohos
+            ~/.pub-cache
+          key: ohos-build-${{ runner.os }}-${{ runner.arch }}-${{ env.FLUTTER_OHOS_REVISION }}-${{ hashFiles('pubspec*.yaml', 'pubspec.lock') }}
+      - name: Set up pinned Flutter-OH
+        run: |
+          flutter_root="$RUNNER_TEMP/flutter-ohos"
+          if [ ! -d "$flutter_root/.git" ]; then
+            git init "$flutter_root"
+            git -C "$flutter_root" remote add origin https://gitcode.com/CPF-Flutter/flutter_flutter.git
+            git -C "$flutter_root" fetch --depth=1 origin "$FLUTTER_OHOS_REVISION"
+            git -C "$flutter_root" checkout --detach FETCH_HEAD
+          fi
+          test "$(git -C "$flutter_root" rev-parse HEAD)" = "$FLUTTER_OHOS_REVISION"
+          # Flutter derives its SDK version from Git tags, including in shallow clones.
+          git -C "$flutter_root" fetch --depth=1 origin tag '3.41.9+ohos-1.0.2'
+          test "$(git -C "$flutter_root" rev-parse '3.41.9+ohos-1.0.2^{commit}')" = "$FLUTTER_OHOS_REVISION"
+          rm -f "$flutter_root/bin/cache/flutter.version.json"
+          echo "$flutter_root/bin" >> "$GITHUB_PATH"
+          echo "DEVECO_NODE_HOME=$HOME/ohos-sdk/command-line-tools/tool/node" >> "$GITHUB_ENV"
+      - name: Resolve dependencies
+        run: |
+          flutter --version
+          flutter config --enable-ohos --no-analytics
+          flutter pub get --enforce-lockfile
+      - name: Analyze and test
+        run: |
+          dart analyze lib tool test
+          flutter test --no-pub
+      - name: Build Release HAP
+        env:
+          DANDANAPI_APPID: ${{ secrets.DANDANAPI_APPID }}
+          DANDANAPI_KEY: ${{ secrets.DANDANAPI_KEY }}
+          KAZUMI_APPID: ${{ secrets.KAZUMI_APPID }}
+          KAZUMI_KEY: ${{ secrets.KAZUMI_KEY }}
+        run: |
+          version="$(sed -n 's/^version: \([^+]*\).*/\1/p' pubspec.yaml)"
+          flutter build hap --release --no-codesign --no-pub \
+            --dart-define="KAZUMI_VERSION=$version" \
+            --dart-define="ENABLE_FLEX_OVERFLOW=false" \
+            --dart-define="DANDANAPI_APPID=$DANDANAPI_APPID" \
+            --dart-define="DANDANAPI_KEY=$DANDANAPI_KEY" \
+            --dart-define="KAZUMI_APPID=$KAZUMI_APPID" \
+            --dart-define="KAZUMI_KEY=$KAZUMI_KEY"
+      - name: Verify and package Release assets
+        env:
+          SOURCE_REF: ${{ inputs.source_ref }}
+        run: |
+          python3 "$RUNNER_TEMP/package_integration_release.py" \
+            build/ohos/hap/entry-default-unsigned.hap --tag "$RELEASE_TAG"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ohos-release
+          path: build/ohos-release/
+          if-no-files-found: error
+      - name: Save toolchain and dependency cache
+        if: always() && steps.build-cache.outputs.cache-primary-key != '' && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ${{ runner.temp }}/flutter-ohos
+            ~/.pub-cache
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
+  publish:
+    name: Publish GitHub prerelease
+    needs: build
+    if: inputs.publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ohos-release
+          path: release
+      - name: Publish verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          RELEASE_COMMIT: ${{ needs.build.outputs.source_commit }}
+        run: |
+          gh release create "$RELEASE_TAG" release/*.hap release/SHA256SUMS release/build-info.json \
+            --target "$RELEASE_COMMIT" \
+            --title "Kazumi $RELEASE_TAG · HarmonyOS" \
+            --notes-file release/RELEASE_NOTES.md \
+            --prerelease --latest=false
