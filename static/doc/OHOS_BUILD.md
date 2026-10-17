@@ -6,15 +6,18 @@
 ## 工具链与依赖
 
 - Flutter-OH 3.41.9+ohos-1.0.2，提交 `62357a93d653bf844f730bb1f4b7cc9e2139d14e`。
-- HarmonyOS SDK 26.0.0.105、JDK 17、Python >=3.12、CMake、Ninja、Go。
-- `pubspec_overrides.yaml` 从 `https://github.com/tignioj/ech_http.git` 引用鸿蒙适配，
-  固定提交为 `c7c9132dfae816680df955a86f95f7b5e36704ad`，克隆本仓库后无需相邻的本地目录。
+- HarmonyOS SDK 26.0.0.105、JDK 17、Python >=3.12、CMake、Ninja。
+- `pubspec_overrides.yaml` 从上游 `https://github.com/ech-research/ech_http.git` 引用鸿蒙适配，
+  固定提交为 `2c58622b3596593b1c6818ddca7cdd0a0631aa15`（上游 PR #1），
+  克隆本仓库后无需相邻的本地目录。构建钩子下载组织仓库
+  `ech-research/libechhttp-ohos-build` 的 `v0.1.0` SDK 并校验 SHA-256，
+  本地仅编译 C++ 桥接代码。
   若需联调本地修改，可临时将该 override 改为 `path: ../ech_http`。
 - 鸿蒙插件及其 federated 实现均固定 Git 提交，解析结果记录在 `pubspec.lock`。
 - `pubspec.yaml` 的 `media_kit` 与 `media_kit_video` 均引用
-  `https://github.com/tignioj/media-kit.git`，固定提交为
-  `049278dee62e18bb008fabc293fbcbbaa2739d7c`。适配基于上游
-  `6b188ae978808a63e5b58b7ce61f7725238c04c5`，克隆后无需本地 media-kit 目录。
+  上游 `https://github.com/Predidit/media-kit.git`，固定提交为
+  `9c31fe57c5c4492835dcd6fea968920f3b01bcb1`（上游 PR #43），
+  克隆后无需本地 media-kit 目录。
   构建钩子识别 Flutter-OH 以 Linux 上报的 OHOS 编译器，选取鸿蒙版 `libmpv.so`，
   用 OHOS triple/sysroot 编译 `libmedia_kit_event_loop.so`，并打包 SDK 的 C++ 运行库。
   不再固定旧版 `994465d9`，也不再依赖任何 `media_kit_libs_*` 插件。
@@ -49,7 +52,7 @@ Apple Silicon 上现在可以完成 Release AOT。
 
 `.github/workflows/ohos-release.yaml` 使用 GitHub 托管的 Ubuntu 24.04 runner，
 安装固定版本的 HarmonyOS CLI 26.0.0.821 和上述固定提交的 Flutter-OH。
-不需要自托管 runner 或本地路径依赖。首次运行会下载工具链和编译 ECH 原生依赖，
+不需要自托管 runner 或本地路径依赖。首次运行会下载工具链、ECH 预编译 SDK 并编译桥接代码，
 后续运行复用 SDK 与 Flutter 缓存。
 
 从包含鸿蒙适配的分支推送 `<pubspec 版本>-ohos.<序号>` 标签即可自动发布测试版：
@@ -202,3 +205,41 @@ Release 自检使用相同命令加上 `--target tool/ohos_smoke.dart` 和
 Pub 的 Git 缓存，并解析为提交 `049278dee62e18bb008fabc293fbcbbaa2739d7c`。
 没有本地路径依赖；213 项 Flutter 测试通过，静态分析无 error/warning，
 正常入口 Release HAP 再次构建成功。
+
+## 切回上游依赖后的 Release 回归（2026-10-17）
+
+- `media_kit` / `media_kit_video` 固定到上游 `Predidit/media-kit` 的
+  `9c31fe57c5c4492835dcd6fea968920f3b01bcb1`，`ech_http` 固定到
+  `ech-research/ech_http` 的 `2c58622b3596593b1c6818ddca7cdd0a0631aa15`。
+  `flutter pub get` 成功，lockfile 仅变更这三个包的来源及提交，其他包版本保持不变。
+- `dart analyze lib tool test` 无 error/warning，保留 27 条现有 info 级 lint；
+  213 项 Flutter 测试全部通过。
+- 正常入口与自检入口的 arm64 Release AOT HAP 均构建、签名、验签通过。
+  `tool/package_ohos_release.py` 的 `verify_hap` 检查确认 `debug=false`、
+  无 Debug kernel，AOT、ECH、mpv、事件循环、C++ 运行库及 Native Assets 映射完整。
+- ECH hook 从组织仓库下载 `libechhttp-ohos-build/v0.1.0` 的 arm64 SDK，
+  归档 SHA-256 为 `986aaea773733301b66a1f94a1986f71b1a31f54e89c4909fcc2fd4b0ea982fc`，
+  本地重新核验一致。CMake 的 `EH_DEPS_ROOT` 指向该预编译 SDK，
+  源码指向新上游提交，仅编译 C++ 桥接代码。
+- MatePad mini（MLR-AL10，API 26）上，正常入口首页与封面显示正常。
+  使用已有 mgnacg 规则播放《游戏人生》第 5 话，确认实际视频画面与播放进度推进。
+  截图为 `build/upstream-release-online.png` 和
+  `build/upstream-release-online-progress.png`。
+- Release 自检日志明确记录 `mode=release`，Bangumi ECH 握手被接受，
+  直接请求、Dio adapter、封面请求均 HTTP 200，封面接收 6643 字节。
+  软解 `hwdec=no` / 硬解 `hwdec=ohcodec` 与同步/异步模式的四种组合
+  各播放、销毁 3 次，合计 12 次；每次渲染首帧、播放进度达到 1 秒，
+  并发销毁复用 Future、重复销毁正常完成、mpv 句柄归零，销毁耗时 96–172 ms。
+  另 3 次初始化期间提前销毁通过。未观察到 Dart 未处理异常、进程崩溃或销毁超时。
+- 本轮日志为 `build/upstream-analyze.log`、`build/upstream-tests.log`、
+  `build/upstream-release-build.log`、`build/upstream-release-smoke-build.log`、
+  `build/upstream-release-smoke.log` 与 `build/upstream-release-smoke-runtime.log`；
+  `build/upstream-release-smoke.png` 确认测试视频纹理实际显示。
+  仍可见 Flutter-OH 图片方向等平台 E/F 日志。
+- 自检后重新构建并安装正常 `lib/main.dart` 入口的 Release 包，确认首页与封面
+  正常、没有自检日志。已清理本次 HTTP 服务与 USB 反向转发。
+  正常未签名包为 `build/Kazumi_2.3.9_OHOS_Upstream_Release_unsigned.hap`，
+  本机设备签名包为 `build/Kazumi_2.3.9_OHOS_Upstream_Release_signed.hap`。
+  `build/upstream-release-final-home.png` 保存最终首页截图。
+- 验证范围为上述 arm64/API 26 真机与一条实际规则；未逐个验证其他规则、
+  低 API、其他设备、后台续播、下载和账号同步，未运行远程 CI。

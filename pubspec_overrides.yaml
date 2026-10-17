@@ -1,8 +1,8 @@
 dependency_overrides:
   ech_http:
     git:
-      url: https://github.com/tignioj/ech_http.git
-      ref: c7c9132dfae816680df955a86f95f7b5e36704ad
+      url: https://github.com/ech-research/ech_http.git
+      ref: 2c58622b3596593b1c6818ddca7cdd0a0631aa15
   connectivity_plus:
     git:
       url: https://gitcode.com/CPF-Flutter/flutter_plus_plugins.git

@@ -395,9 +395,9 @@ packages:
     dependency: "direct main"
     description:
       path: "."
-      ref: c7c9132dfae816680df955a86f95f7b5e36704ad
-      resolved-ref: c7c9132dfae816680df955a86f95f7b5e36704ad
-      url: "https://github.com/tignioj/ech_http.git"
+      ref: "2c58622b3596593b1c6818ddca7cdd0a0631aa15"
+      resolved-ref: "2c58622b3596593b1c6818ddca7cdd0a0631aa15"
+      url: "https://github.com/ech-research/ech_http.git"
     source: git
     version: "0.2.1"
   equatable:
@@ -1008,18 +1008,18 @@ packages:
     dependency: "direct main"
     description:
       path: media_kit
-      ref: "049278dee62e18bb008fabc293fbcbbaa2739d7c"
-      resolved-ref: "049278dee62e18bb008fabc293fbcbbaa2739d7c"
-      url: "https://github.com/tignioj/media-kit.git"
+      ref: "9c31fe57c5c4492835dcd6fea968920f3b01bcb1"
+      resolved-ref: "9c31fe57c5c4492835dcd6fea968920f3b01bcb1"
+      url: "https://github.com/Predidit/media-kit.git"
     source: git
     version: "1.1.11"
   media_kit_video:
     dependency: "direct main"
     description:
       path: media_kit_video
-      ref: "049278dee62e18bb008fabc293fbcbbaa2739d7c"
-      resolved-ref: "049278dee62e18bb008fabc293fbcbbaa2739d7c"
-      url: "https://github.com/tignioj/media-kit.git"
+      ref: "9c31fe57c5c4492835dcd6fea968920f3b01bcb1"
+      resolved-ref: "9c31fe57c5c4492835dcd6fea968920f3b01bcb1"
+      url: "https://github.com/Predidit/media-kit.git"
     source: git
     version: "1.2.5"
   menu_base:
